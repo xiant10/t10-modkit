@@ -123,6 +123,10 @@ mux.Handle(docsmcp.Route, h)
 | `New(Options) (*Handler, error)` | Reads every doc once. Broken front matter or a broken `openapi.yaml` is an error, so a test that calls `New` keeps the docs servable |
 | `(*Handler).ServeHTTP` | MCP over Streamable HTTP: one JSON-RPC message per `POST`, no session, no token. Refuses other methods with `405` and a browser's request with `403` |
 | `(*Handler).Docs() []Doc` | What it serves, in overview order |
+| `(*Handler).Wrap(next) http.Handler` | Answers `Route` with the docs and passes everything else to `next`, so `main` mounts the docs in front of the image's own handler |
+| `DocsOnly(os.Args, h) (bool, error)` | Serves only `Route` when the command runs as `<command> docs <addr>`, with no database, for the contract's suite. Call it first in `main` |
+| `(*Handler).ServeStdio(in, out)` | The same messages over stdio, one per line, for a command-line tool |
+| `(*Handler).Answer(method, params)` | One request in process: the result, or a JSON-RPC error code and message. `t10-docs` uses it for the docs it carries |
 | `Tool{Name, Description, Action, InputSchema}` | One agent tool, as `docs_agent_tools` lists it |
 
 ## The web kit
