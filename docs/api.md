@@ -94,6 +94,37 @@ The frame of every server-drawn page, such as the console and `auth-server`'s ac
 | `AccountLink(account, back)` | The account page, coming back to `back` |
 | `ValidTheme(theme)` | `system`, `light` or `dark` |
 
+### `docsmcp`
+
+Serves the image's own docs to coding agents over MCP at `/docs/mcp`, as the workspace's [docs contract](../../contracts/docs/README.md) describes. It serves only docs whose front matter says `audience: consumer` and that aren't records, because the route takes no token.
+
+```go
+// docs/docs.go in the module's repo, so the binary carries its docs.
+package docs
+
+import "embed"
+
+//go:embed *.md openapi.yaml
+var FS embed.FS
+```
+
+```go
+h, err := docsmcp.New(docsmcp.Options{
+	Component: "t10-collab", Summary: "Work items, offers and lists…", Version: version,
+	Docs: docs.FS, AgentTools: func() []docsmcp.Tool { … },
+})
+mux.Handle(docsmcp.Route, h)
+```
+
+| Name | Does |
+| --- | --- |
+| `Route` | `/docs/mcp` |
+| `Options{Component, Summary, Version, Docs, AgentTools}` | The image's name, one sentence on what it offers, the commit it was built from, its `docs/` folder, and optionally its agent tools |
+| `New(Options) (*Handler, error)` | Reads every doc once. Broken front matter or a broken `openapi.yaml` is an error, so a test that calls `New` keeps the docs servable |
+| `(*Handler).ServeHTTP` | MCP over Streamable HTTP: one JSON-RPC message per `POST`, no session, no token. Refuses other methods with `405` and a browser's request with `403` |
+| `(*Handler).Docs() []Doc` | What it serves, in overview order |
+| `Tool{Name, Description, Action, InputSchema}` | One agent tool, as `docs_agent_tools` lists it |
+
 ## The web kit
 
 `web/` is the TypeScript and React every t10 web app shares; [`web/README.md`](../web/README.md) explains each part.
