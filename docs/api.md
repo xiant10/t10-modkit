@@ -1,3 +1,11 @@
+---
+title: "t10-modkit API"
+audience: consumer
+kind: reference
+status: current
+summary: "t10-modkit's packages, what each exports, and the rules for using them in a module."
+---
+
 # t10-modkit API
 
 The reference for t10-modkit's packages: what each exports and the rules for using it. It's a library, with no service. Consumers carry a snapshot in `third_party/t10-modkit` (Go) or `web/src/kit/` (the web kit), made by the workspace's `scripts/sync-modkit.sh`; `make check` fails when one drifts, so change it here.
