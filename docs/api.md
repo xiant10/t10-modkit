@@ -90,7 +90,7 @@ The frame of every server-drawn page, such as the console and `auth-server`'s ac
 | `CSS` | The rail, Apps list and account menu, in the web kit's tokens |
 | `Homes`, `Tenant`, `App`, `Link` | `auth-server`'s `GET /v1/me/homes` |
 | `Places(homes, tenant, current, zh) []Place` | The Apps list, in the same order in every app |
-| `Menu` | The account menu, with `Initial()` |
+| `Menu` | The account menu, with `Initial()`. It offers no language or theme: those are on the account page |
 | `AccountLink(account, back)` | The account page, coming back to `back` |
 | `ValidTheme(theme)` | `system`, `light` or `dark` |
 
@@ -138,12 +138,12 @@ mux.Handle(docsmcp.Route, h)
 | `api.ts` | `postJSON`, `ApiError`, `newTurnId`, `onSignedOut`, `announceSignedOut`, `onModuleGone` |
 | `session.ts` | `watchSession`, `signIn`, `signInHref`, `keepDraftsFor`, `SignInReason` |
 | `preferences.ts` | `useSavedPreferences` |
-| `theme.ts` | `useTheme`, `applyTheme`, `setTheme`, `Theme` |
-| `i18n.tsx` | `I18nProvider`, `useI`, `I`, `Language`. Each app passes its own catalog |
+| `theme.ts` | `useTheme`, `applyTheme`, `applySavedTheme` (the saved preferences' only), `Theme` |
+| `i18n.tsx` | `I18nProvider`, `useI18n`, `useApplyLanguage` (the saved preferences' only), `Language`, `LANGUAGES`. Each app passes its own catalog |
 | `frame.tsx` | `Frame`, `Rail`, `AccountMenu`, `SectionLinks`, `OtherPlaces`, `groupSections`, `sectionCount`, `accountHref`, `focusMenuButton`, `maskIcon`, `Icon`, `NavSection`, `NavGroup`, `NAV`, `RailApp`, `CONSOLE`, `WORKBENCH` |
 | `command.tsx` | `Palette`, `SearchButton`, `useSearchShortcut`, `SHORTCUT`, `Bell`, `BellItem`, `PaletteEntry` |
 | `ask.tsx` | `AskPanel`, `AskButton`, `AskTransport`, `AskMessage` |
-| `ui.tsx` | `Dialog`, `Menu`, `Segmented`, `Setting`, `Skeleton`, `Empty`, `Avatar`, `CopyButton`, `Logo`, `LanguageSwitch`, `ErrorBoundary`, `FeedbackProvider`, `useFeedback` |
+| `ui.tsx` | `Dialog`, `Menu`, `Segmented`, `Setting`, `Skeleton`, `Empty`, `Avatar`, `CopyButton`, `Logo`, `ErrorBoundary`, `FeedbackProvider`, `useFeedback` |
 | `storage.ts` | `load`, `save` |
 | `layout.ts` | `useMedia`, `navigateOptions`, `RESULTS` |
 | `app.css` | The tokens and components |
