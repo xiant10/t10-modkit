@@ -1,6 +1,6 @@
 # AGENTS.md
 
-For coding agents working in this repo. Shared Go and web plumbing for t10 modules and web apps: people, ids, page, websession, frame, docsmcp, and the web kit.
+For coding agents working in this repo. Shared Go and web plumbing for t10 modules and web apps: people, ids, page, websession, frame, docsmcp, pgdb, telemetry, httpjson, and the web kit.
 
 ## Build and test
 
