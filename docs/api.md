@@ -129,6 +129,53 @@ mux.Handle(docsmcp.Route, h)
 | `(*Handler).Answer(method, params)` | One request in process: the result, or a JSON-RPC error code and message. `t10-docs` uses it for the docs it carries |
 | `Tool{Name, Description, Action, InputSchema}` | One agent tool, as `docs_agent_tools` lists it |
 
+### `pgdb`
+
+Opens a service's Postgres pool and applies its embedded migrations. A service keeps a few lines of its own in `internal/db`: its schema, its lock key and the embed.
+
+```go
+//go:embed migrations/*.sql
+var migrations embed.FS
+
+func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
+	return pgdb.Migrate(ctx, pool, pgdb.Migrations{FS: migrations, Schema: "collab", Lock: 7410_0002})
+}
+```
+
+| Name | Does |
+| --- | --- |
+| `Open(ctx, url, maxConns)` | A pool, pinged once. `maxConns` zero keeps pgx's default |
+| `Migrations{FS, Schema, Lock}` | The files at `migrations/*.sql`, the schema that holds `schema_migrations`, and the advisory lock key |
+| `Migrate(ctx, pool, Migrations)` | Applies, in name order, every file not yet in `<schema>.schema_migrations`, each in its own transaction, under the lock so replicas take turns. A recorded name is the file's path, such as `migrations/0001_init.sql`, so files are never renamed |
+| `IsUniqueViolation(err, constraint)` | Whether `err` broke that unique index |
+
+Lock keys only need to differ within one database, but each service has its own so a shared database stays safe: auth-server `7410_0001`, t10-collab `0002`, workbench `0003`, t10-agent-control `0005`, t10-console and t10-automations `0008`, t10-knowledge `0010`, t10-property `0011`.
+
+### `telemetry`
+
+Request traces over OTLP/HTTP, as [ARCHITECTURE.md](../../ARCHITECTURE.md#telemetry) asks of every service. Spans carry routes and identifiers, never a query string or a body. With no endpoint it does nothing.
+
+| Name | Does |
+| --- | --- |
+| `Setup(ctx, service, endpoint, options...)` | Names the service, sets the W3C propagator and starts the exporter at `endpoint` + `/v1/traces`. Returns a shutdown that flushes. A bad endpoint logs and leaves tracing off; it never stops the service. Options reach the tracer provider |
+| `Wrap(pattern, handler, options...)` | Traces one route, registered on a mux so the span is named by its pattern, and marks `t10.session.id` from `X-Session-ID` |
+| `WrapAll(handler)` | The same around a whole mux: each span is renamed after the route that matched |
+| `Inject(ctx, header)` | Puts the trace into an outgoing request as `traceparent` |
+| `Continue(ctx, traceparent, name)` | A span under a traceparent that came inside a message, as MCP sends it |
+| `WithSession(handler)`, `SpanValue(s)` | The session marking on its own, and the check that a value is an identifier, not free text |
+| `Service()`, `Tracer()` | The name given to `Setup`, and its tracer |
+
+### `httpjson`
+
+The JSON bodies of t10's APIs, and the one error body they answer with: `{"error": "<snake_case code>", "message": "<optional sentence>"}`. OAuth endpoints and OpenAI-compatible routes keep the shape their protocol fixes.
+
+| Name | Does |
+| --- | --- |
+| `Write(w, status, body)` | JSON with `Cache-Control: no-store` |
+| `Error(w, status, code, message)` | The error body. An empty message is left out |
+| `ErrorBody{Error, Message}` | The error body, for clients and tests |
+| `Decode(w, r, into)` | Reads one JSON value. On a bad body it answers `400 invalid_request`, or `413 too_large` past a limit the route set with `http.MaxBytesReader`, and returns false |
+
 ## The web kit
 
 `web/` is the TypeScript and React every t10 web app shares; [`web/README.md`](../web/README.md) explains each part.
