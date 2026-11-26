@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/xiant10/t10-modkit/people"
 	"github.com/xiant10/t10-modkit/verifier"
 )
 
@@ -50,9 +51,17 @@ type Auth struct {
 	HTTP            *http.Client
 	Verifier        *verifier.Verifier
 
-	mu           sync.Mutex
-	serviceTok   string
-	serviceUntil time.Time
+	orgOnce sync.Once
+	org     *people.Client
+}
+
+// people is the client of auth-server's token and org API this Auth shares: one service
+// token, cached and renewed, for every call the module makes as itself.
+func (a *Auth) people() *people.Client {
+	a.orgOnce.Do(func() {
+		a.org = people.New(people.Options{URL: a.URL, ClientID: a.Service, ClientSecret: a.Secret, HTTPClient: a.HTTP})
+	})
+	return a.org
 }
 
 // NewAuth is Auth for the module's service, from the settings the project's standard wiring
@@ -182,26 +191,14 @@ func (a *Auth) entitled(ctx context.Context, tenant, user string) (Caller, error
 }
 
 // ServiceToken is this service's own token from auth-server, cached and renewed before it
-// expires: for any client that calls auth-server or another service as the module itself,
-// rather than as a person, so a module never repeats the exchange.
+// expires (people's): for any client that calls auth-server or another service as the module
+// itself, rather than as a person, so a module never repeats the exchange.
 func (a *Auth) ServiceToken(ctx context.Context) (string, error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.serviceTok != "" && time.Until(a.serviceUntil) > 30*time.Second {
-		return a.serviceTok, nil
-	}
-	var out struct {
-		Token     string `json:"access_token"`
-		ExpiresIn int    `json:"expires_in"`
-	}
-	body := map[string]string{"grant_type": "client_credentials", "client_id": a.Service, "client_secret": a.Secret}
-	if err := a.request(ctx, "POST", "/v1/token", "", body, &out); err != nil || out.Token == "" {
+	token, err := a.people().ServiceToken(ctx)
+	if err != nil || token == "" {
 		return "", ErrUnavailable
 	}
-	ttl := cmp.Or(out.ExpiresIn, 300)
-	a.serviceTok = out.Token
-	a.serviceUntil = time.Now().Add(time.Duration(ttl) * time.Second)
-	return out.Token, nil
+	return token, nil
 }
 
 func (a *Auth) request(ctx context.Context, method, path, token string, body, out any) error {

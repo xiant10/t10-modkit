@@ -78,6 +78,8 @@ Browser sign-in for a t10 web app's server: the authorization-code flow with PKC
 | `(*Manager).Prune(ctx)` | Delete expired sessions |
 | `AuthClient` | `Redeem`, `Refresh`, `Revoke`, and `Call(ctx, method, path, bearer, body)` for any `auth-server` route |
 | `SignInHints(target, reason, lang)`, `SafeNext(next)`, `IsSecure(publicURL)` | Helpers |
+| `NewSealer(key)`, `Sealer.Seal(plain, purpose)`, `Open` | The same AES-256-GCM sealing for a caller with its own store, such as `module`'s session cookie |
+| `TokenError{Status, Code}` | A refusal from the token endpoint, wrapping the error it means, with its status |
 | `ErrSignedOut`, `ErrTenantRequired`, `ErrTenantDenied`, `ErrMFARequired`, `ErrUnavailable` | Why `Identify` or `Complete` failed. Map them to `401 signed_out`, `403 tenant_denied`, `403 mfa_required` and `503` |
 
 ### `frame`
@@ -125,6 +127,7 @@ mux.Handle(docsmcp.Route, h)
 | `(*Handler).Docs() []Doc` | What it serves, in overview order |
 | `(*Handler).Wrap(next) http.Handler` | Answers `Route` with the docs and passes everything else to `next`, so `main` mounts the docs in front of the image's own handler |
 | `DocsOnly(os.Args, h) (bool, error)` | Serves only `Route` when the command runs as `<command> docs <addr>`, with no database, for the contract's suite. Call it first in `main` |
+| `Versions`, `Negotiate(params)` | The MCP protocol versions t10's servers speak, newest first, and the one to answer an `initialize` with |
 | `(*Handler).ServeStdio(in, out)` | The same messages over stdio, one per line, for a command-line tool |
 | `(*Handler).Answer(method, params)` | One request in process: the result, or a JSON-RPC error code and message. `t10-docs` uses it for the docs it carries |
 | `Tool{Name, Description, Action, InputSchema}` | One agent tool, as `docs_agent_tools` lists it |
@@ -207,6 +210,28 @@ The flows are the registry's: confirming applies under the person's current righ
 | `ontology/client` | The Go client: `Client{Modules, Versions}` with `Load`, `Describe`, `Search`, `Get`, `Links`, `Resolve` (grouped by module, in the order given, naming the modules that didn't answer), `Validate`, `Apply`, `Undo`, `Proposals`, `Confirm`, `Dismiss`. It calls with the person's own token for this request, and refuses a delegated token (`act` or `grant` claim) or a service's own (no session) with `person_token_required` before sending. Errors keep their status and code |
 
 `ontology/testdata/ledgermod` is a small in-memory test module shaped like a sales module: private rows per rep, a pack as its tenant layer, a ledger with derived `stage`, `score` and `band`, `record.add` at `undoable`. The package's tests run every scenario the workspace's specs name for sales against it, and `ledgermod/stub` serves it over HTTP for the workspace's conformance suite. `ontology/testdata/client/fixture.json` is answers recorded from it, which both clients replay (`ONTOLOGY_RECORD=1 go test ./ontology/client` records it again).
+
+### `module`
+
+What every business module's service answers, for modules made from t10-template: `/healthz`, `/readyz`, `/v1/module`, `/v1/access`, `/v1/me/nav`, `/v1/notifications`, its tools at `/mcp`, and its web app's sign-in and frame. A person's token and an agent's delegated token are checked against auth-server, and the person's standing is read fresh on every request. It moved here from the template's kit (t10kit) with its API unchanged, and is built on this repo's packages: error bodies from `httpjson`, the session cookie's sealing and the calls to auth-server from `websession`, pages in `frame`, MCP versions from `docsmcp`, and the service token and members from `people`.
+
+| Name | Does |
+| --- | --- |
+| `Module{ID, Service, Label, LabelZH, PublicURL, Sections, Notifier, Access, Ping, Tools}`, `Register(mux)` | One module's service, and the routes every module answers |
+| `Person(w, r)`, `PersonPage(w, r)`, `Token(r)` | The signed-in person, from a bearer token or the session cookie; a page sends a browser that isn't signed in to sign-in |
+| `View`, `Page`, `Styles` | A server-drawn page in the shared frame |
+| `Access`, `Auth`, `NewAuth(module, service)`, `Fake` | Who a request is for: auth-server, or a stand-in that accepts `Bearer person`, `Bearer person:<perms>`, `Bearer agent` and `Bearer agent:<perms>` |
+| `Service`, `Member` | What a module does as itself: its own token, and a tenant's members |
+| `Tool`, `Args`, `Schema` | An agent tool, its arguments, and its input schema. Results are marked as data |
+| `Reply`, `Refuse` | A JSON answer, and an Access error as 401, 403 or 503 |
+
+### `verifier`
+
+A copy of `auth-server/verifier`, because Go can't import `t10-auth-server`; the workspace's `make check` keeps the two equal. It verifies a token offline against auth-server's keys and reads a delegated token's grant chain.
+
+| Name | Does |
+| --- | --- |
+| `New(Config)`, `Verify(ctx, token)` | A verifier, and a token's `Identity`: a person, an agent acting for one, or a service |
 
 ### `httpjson`
 

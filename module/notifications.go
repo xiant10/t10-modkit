@@ -3,6 +3,7 @@ package module
 import (
 	"context"
 	"encoding/json"
+	"github.com/xiant10/t10-modkit/httpjson"
 	"io"
 	"net/http"
 	"strconv"
@@ -55,7 +56,7 @@ func (m *Module) notifications(w http.ResponseWriter, r *http.Request) {
 	}
 	list, next, err := m.Notifier.Notifications(r.Context(), c, cursor, limit)
 	if err != nil {
-		Reply(w, 503, map[string]string{"error": "notifications_unavailable"})
+		httpjson.Error(w, 503, "notifications_unavailable", "")
 		return
 	}
 	if list == nil {
@@ -73,12 +74,12 @@ func (m *Module) markRead(w http.ResponseWriter, r *http.Request) {
 		IDs []string `json:"ids"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body) != nil {
-		Reply(w, 400, map[string]string{"error": "invalid_request"})
+		httpjson.Error(w, 400, "invalid_request", "")
 		return
 	}
 	if m.Notifier != nil && len(body.IDs) > 0 {
 		if err := m.Notifier.MarkRead(r.Context(), c, body.IDs); err != nil {
-			Reply(w, 503, map[string]string{"error": "notifications_unavailable"})
+			httpjson.Error(w, 503, "notifications_unavailable", "")
 			return
 		}
 	}

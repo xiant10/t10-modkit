@@ -3,7 +3,6 @@ package module
 import (
 	"cmp"
 	"context"
-	"net/url"
 	"strings"
 )
 
@@ -29,48 +28,28 @@ type Member struct {
 }
 
 // Members are a tenant's active members, from auth-server's org API with the service's own
-// token. Nothing is cached, so a module that reads them often keeps its own short cache.
+// token (people's). Nothing is cached, so a module that reads them often keeps its own short
+// cache.
 func (a *Auth) Members(ctx context.Context, tenant string) ([]Member, error) {
-	token, err := a.ServiceToken(ctx)
-	if err != nil {
-		return nil, err
-	}
+	org := a.people()
 	var all []Member
-	units := map[string]string{}
 	cursor := ""
 	for range 100 {
-		q := url.Values{"tenant": {tenant}, "status": {"active"}, "limit": {"500"}}
-		if cursor != "" {
-			q.Set("cursor", cursor)
+		page, next, err := org.Search(ctx, tenant, "", "", cursor, 500)
+		if err != nil {
+			return nil, ErrUnavailable
 		}
-		var page struct {
-			Members []struct {
-				UserID      string `json:"user_id"`
-				DisplayName string `json:"display_name"`
-				Kind        string `json:"kind"`
-				Unit        string `json:"org_unit_id"`
-			} `json:"members"`
-			Next string `json:"next_cursor"`
+		for _, m := range page {
+			all = append(all, Member{UserID: m.UserID, Name: cmp.Or(strings.TrimSpace(m.DisplayName), m.UserID), Kind: m.Kind, Unit: m.OrgUnitID})
 		}
-		if err := a.request(ctx, "GET", "/v1/org/members?"+q.Encode(), token, nil, &page); err != nil {
-			return nil, err
-		}
-		for _, m := range page.Members {
-			all = append(all, Member{UserID: m.UserID, Name: cmp.Or(strings.TrimSpace(m.DisplayName), m.UserID), Kind: m.Kind, Unit: m.Unit})
-		}
-		if cursor = page.Next; cursor == "" {
+		if cursor = next; cursor == "" {
 			break
 		}
 	}
 	// Units name what people do, but without them the members are still the members.
-	var out struct {
-		Units []struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
-		} `json:"units"`
-	}
-	if a.request(ctx, "GET", "/v1/org/units?"+url.Values{"tenant": {tenant}}.Encode(), token, nil, &out) == nil {
-		for _, u := range out.Units {
+	units := map[string]string{}
+	if list, err := org.Units(ctx, tenant); err == nil {
+		for _, u := range list {
 			units[u.ID] = u.Name
 		}
 	}

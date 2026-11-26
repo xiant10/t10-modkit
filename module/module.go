@@ -11,12 +11,12 @@ package module
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
 
 	"github.com/xiant10/t10-modkit/frame"
+	"github.com/xiant10/t10-modkit/httpjson"
 )
 
 // Module is one module's service: who it is, how it checks callers, and its tools.
@@ -58,11 +58,11 @@ func (m *Module) ready(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 	if m.Ping != nil && m.Ping(ctx) != nil {
-		Reply(w, 503, map[string]string{"error": "database_unavailable"})
+		httpjson.Error(w, 503, "database_unavailable", "")
 		return
 	}
 	if m.Access.Ready(ctx) != nil {
-		Reply(w, 503, map[string]string{"error": "authorization_unavailable"})
+		httpjson.Error(w, 503, "authorization_unavailable", "")
 		return
 	}
 	Reply(w, 200, map[string]string{"status": "ready"})
@@ -108,23 +108,19 @@ func (m *Module) Person(w http.ResponseWriter, r *http.Request) (Caller, bool) {
 	return c, true
 }
 
-// Refuse answers an Access error: 401, 403, or 503 when access couldn't be checked.
+// Refuse answers an Access error: 401, 403, or 503 when access couldn't be checked, in the
+// error body every t10 API answers with.
 func Refuse(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ErrUnauthorized):
 		w.Header().Set("WWW-Authenticate", "Bearer")
-		Reply(w, 401, map[string]string{"error": "unauthorized"})
+		httpjson.Error(w, 401, "unauthorized", "")
 	case errors.Is(err, ErrForbidden):
-		Reply(w, 403, map[string]string{"error": "forbidden"})
+		httpjson.Error(w, 403, "forbidden", "")
 	default:
-		Reply(w, 503, map[string]string{"error": "authorization_unavailable"})
+		httpjson.Error(w, 503, "authorization_unavailable", "")
 	}
 }
 
-// Reply answers with v as JSON, never cached.
-func Reply(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-store")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
-}
+// Reply answers with v as JSON, never cached (httpjson.Write).
+func Reply(w http.ResponseWriter, status int, v any) { httpjson.Write(w, status, v) }
