@@ -183,7 +183,7 @@ ontology.Mount(mux, reg.Routes())
 
 | Name | Does |
 | --- | --- |
-| `New(Options[C])`, `Options` | A registry. `Authenticate` reads a request's caller and whether its token is a person's or delegated; `Who` names the person; `Can` checks a business permission; `Tenant` answers the caller's tenant layer |
+| `New(Options[C])`, `Options` | A registry. `Authenticate` reads a request's caller and whether its token is a person's or delegated; `Who` names the person; `Can` checks a business permission; `Tenant` answers the caller's tenant layer; `Errors` maps the module's own errors, such as its store's not-found, to the contract's |
 | `AddObject(reg, ObjectType[C, R])` | An object type over the module's reads. `R` is its record type. `Search` answers up to `Limit+1` records after `After`, scope first; `Get` answers `ErrNotFound` for a record the caller can't reach; `View` is what the caller may see; `Follow` pages a link; `Sources` names a derived value's records |
 | `AddAction(reg, ActionType[C, R])` | An action over the module's command path: `Available` (a reason code or ""), `Validate`, `Apply` and, for an undo action, `Revert`. `R` is the record type of the type it acts on, `struct{}` for a create |
 | `reg.AddEvent(kind, on)` | An event kind the module posts |
@@ -191,7 +191,7 @@ ontology.Mount(mux, reg.Routes())
 | `reg.Core()`, `reg.Describe(ctx, c)` | The core, and the caller's descriptor with its tenant layer, which is refused when it does more than add |
 | `CheckCore(d)`, `CheckTenant(core, layer)` | The same rules as `contracts/ontology/descriptor.ts`, for a module's own tests, such as of a pack before it's published |
 | `reg.Routes()`, `reg.ProposalRoutes()`, `Mount(mux, routes)` | The contract's routes, each traced by its pattern. Every one but `/v1/ontology` refuses a delegated token with `401 person_token_required` |
-| `reg.Tools()`, `Tool[C]` | The generated MCP tools, as `docsmcp.Tool` values with a `Run`: `<prefix>_describe`, `_search`, `_get` and `_propose`, and `_act` when the core has an `undoable` action. The module's MCP server checks the grant holds `Tool.Action`, builds the person's caller narrowed by the grant, and calls `Run`. Results are marked as data, sensitive values masked, and filters or sorts on them refused |
+| `reg.Tools()`, `Tool[C]` | The generated MCP tools, as `docsmcp.Tool` values with a `Run`: `<prefix>_describe`, `_search`, `_get` and `_propose`, and `_act` when the core has an `undoable` action. The module's MCP server checks the grant holds `Tool.Action`, builds the person's caller narrowed by the grant, and calls `Run`. Results are marked as data, sensitive values masked (a title from a sensitive property too), and filters or sorts on them refused |
 | `reg.GetObject`, `Search`, `Follow`, `Resolve`, `Validate`, `Apply`, `Undo`, `Propose`, `Proposals`, `Confirm`, `Dismiss` | What the routes and tools call, for a module's own handlers and tests |
 | `DecodeSearch(body, props, defaultSort, agent)`, `Query`, `Filter`, `Sort`, `Position` | The filter grammar, typed against a type's properties: what `Search` gets |
 | `Error`, `Fail(status, code, message)`, `ErrNotFound`, `ErrForbidden`, `ErrWrongState`, `ErrStaleRevision`, `ErrUndoConflict`, `ErrFilterNotAllowed`, … | Refusals with the contract's status and code. A module returns them, or its own `*Error` with the same code, and the routes and tools answer them as they are |
