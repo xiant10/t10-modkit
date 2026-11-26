@@ -1,11 +1,8 @@
 package module
 
 import (
-	"bytes"
 	"cmp"
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -17,6 +14,9 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/xiant10/t10-modkit/httpjson"
+	"github.com/xiant10/t10-modkit/websession"
 )
 
 // Web sign-in and encrypted session cookies for a module with `web` in CAPABILITIES.
@@ -42,21 +42,14 @@ func (m *Module) sessionKey() []byte {
 	return sum[:]
 }
 
+// seal and open are websession's sealing, for the module's own cookie: the purpose is the
+// module's ID, so a cookie can't be moved between modules.
 func (m *Module) seal(plain string) (string, error) {
-	block, err := aes.NewCipher(m.sessionKey())
+	s, err := websession.NewSealer(m.sessionKey())
 	if err != nil {
 		return "", err
 	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", err
-	}
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return "", err
-	}
-	sealed := gcm.Seal(nonce, nonce, []byte(plain), []byte(m.ID))
-	return base64.RawURLEncoding.EncodeToString(sealed), nil
+	return base64.RawURLEncoding.EncodeToString(s.Seal([]byte(plain), m.ID)), nil
 }
 
 func (m *Module) open(encoded string) (string, bool) {
@@ -64,20 +57,22 @@ func (m *Module) open(encoded string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	block, err := aes.NewCipher(m.sessionKey())
+	s, err := websession.NewSealer(m.sessionKey())
 	if err != nil {
 		return "", false
 	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil || len(raw) < gcm.NonceSize() {
-		return "", false
-	}
-	nonce, ciphertext := raw[:gcm.NonceSize()], raw[gcm.NonceSize():]
-	plain, err := gcm.Open(nil, nonce, ciphertext, []byte(m.ID))
+	plain, err := s.Open(raw, m.ID)
 	if err != nil {
 		return "", false
 	}
 	return string(plain), true
+}
+
+// auth is websession's client of auth-server, for the web client's code exchange and calls
+// made as the person.
+func (m *Module) auth() *websession.AuthClient {
+	return &websession.AuthClient{URL: strings.TrimRight(cmp.Or(os.Getenv("AUTH_URL"), os.Getenv("AUTH_ISSUER")), "/"),
+		ClientID: m.Service + "-web", ClientSecret: os.Getenv("AUTH_WEB_CLIENT_SECRET"), HTTP: authHTTP}
 }
 
 func (m *Module) secureCookie() bool {
@@ -166,7 +161,7 @@ func (m *Module) login(w http.ResponseWriter, r *http.Request) {
 			tok = "person:" + perms[0]
 		}
 		if m.setSessionCookie(w, tok, 12*3600) != nil {
-			Reply(w, 500, map[string]string{"error": "session_unavailable"})
+			httpjson.Error(w, 500, "session_unavailable", "")
 			return
 		}
 		http.Redirect(w, r, next, http.StatusSeeOther)
@@ -174,13 +169,13 @@ func (m *Module) login(w http.ResponseWriter, r *http.Request) {
 	}
 	issuer := strings.TrimRight(os.Getenv("AUTH_ISSUER"), "/")
 	if issuer == "" || m.PublicURL == "" {
-		Reply(w, 503, map[string]string{"error": "authorization_unavailable"})
+		httpjson.Error(w, 503, "authorization_unavailable", "")
 		return
 	}
 	state, verifier := randomToken(16), randomToken(32)
 	sealed, err := m.seal(state + "\n" + verifier + "\n" + next)
 	if err != nil {
-		Reply(w, 500, map[string]string{"error": "session_unavailable"})
+		httpjson.Error(w, 500, "session_unavailable", "")
 		return
 	}
 	http.SetCookie(w, &http.Cookie{
@@ -212,53 +207,33 @@ func (m *Module) callback(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true, Secure: m.secureCookie(), SameSite: http.SameSiteLaxMode,
 	})
 	if err != nil {
-		Reply(w, 400, map[string]string{"error": "invalid_state"})
+		httpjson.Error(w, 400, "invalid_state", "")
 		return
 	}
 	plain, ok := m.open(c.Value)
 	parts := strings.SplitN(plain, "\n", 3)
 	code := r.URL.Query().Get("code")
 	if !ok || len(parts) != 3 || parts[0] == "" || r.URL.Query().Get("state") != parts[0] || code == "" {
-		Reply(w, 400, map[string]string{"error": "invalid_state"})
+		httpjson.Error(w, 400, "invalid_state", "")
 		return
 	}
 	verifier, next := parts[1], safeNext(parts[2])
-	authURL := strings.TrimRight(cmp.Or(os.Getenv("AUTH_URL"), os.Getenv("AUTH_ISSUER")), "/")
-	body, _ := json.Marshal(map[string]string{
-		"grant_type":    "authorization_code",
-		"client_id":     m.Service + "-web",
-		"client_secret": os.Getenv("AUTH_WEB_CLIENT_SECRET"),
-		"code":          code,
-		"redirect_uri":  strings.TrimRight(m.PublicURL, "/") + "/auth/callback",
-		"code_verifier": verifier,
-	})
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, authURL+"/v1/token", bytes.NewReader(body))
+	tokens, err := m.auth().Redeem(r.Context(), code, strings.TrimRight(m.PublicURL, "/")+"/auth/callback", verifier, "")
+	var refused *websession.TokenError
+	if errors.As(err, &refused) && refused.Status < 500 {
+		httpjson.Error(w, 401, "unauthorized", "")
+		return
+	}
 	if err != nil {
-		Reply(w, 503, map[string]string{"error": "authorization_unavailable"})
+		httpjson.Error(w, 503, "authorization_unavailable", "")
 		return
 	}
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{Timeout: 5 * time.Second}
-	res, err := client.Do(req)
-	if err != nil {
-		Reply(w, 503, map[string]string{"error": "authorization_unavailable"})
-		return
+	maxAge := int(time.Until(tokens.ExpiresAt).Seconds())
+	if maxAge <= 0 {
+		maxAge = 12 * 3600
 	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		Reply(w, 401, map[string]string{"error": "unauthorized"})
-		return
-	}
-	var out struct {
-		AccessToken string `json:"access_token"`
-		ExpiresIn   int    `json:"expires_in"`
-	}
-	if json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&out) != nil || out.AccessToken == "" {
-		Reply(w, 503, map[string]string{"error": "authorization_unavailable"})
-		return
-	}
-	if m.setSessionCookie(w, out.AccessToken, cmp.Or(out.ExpiresIn, 12*3600)) != nil {
-		Reply(w, 500, map[string]string{"error": "session_unavailable"})
+	if m.setSessionCookie(w, tokens.Access, maxAge) != nil {
+		httpjson.Error(w, 500, "session_unavailable", "")
 		return
 	}
 	http.Redirect(w, r, next, http.StatusSeeOther)
@@ -271,7 +246,7 @@ func (m *Module) callback(w http.ResponseWriter, r *http.Request) {
 // auth-server, it goes to next.
 func (m *Module) logout(w http.ResponseWriter, r *http.Request) {
 	if !m.sameOrigin(r) {
-		Reply(w, 403, map[string]string{"error": "forbidden"})
+		httpjson.Error(w, 403, "forbidden", "")
 		return
 	}
 	target := m.signOutTarget(r)
@@ -318,36 +293,18 @@ func (m *Module) signOutTarget(r *http.Request) string {
 }
 
 // callAuth calls auth-server as the person whose token this is, with a JSON body when body
-// isn't nil, and decodes a 200's JSON answer into out when out isn't nil.
+// isn't nil, and decodes a 200's JSON answer into out when out isn't nil (websession's Call).
 func callAuth(ctx context.Context, method, path, token string, body, out any) (int, error) {
-	var rd io.Reader
-	if body != nil {
-		raw, err := json.Marshal(body)
-		if err != nil {
-			return 0, err
-		}
-		rd = bytes.NewReader(raw)
-	}
-	authURL := strings.TrimRight(cmp.Or(os.Getenv("AUTH_URL"), os.Getenv("AUTH_ISSUER")), "/")
-	req, err := http.NewRequestWithContext(ctx, method, authURL+path, rd)
+	status, data, err := (&Module{}).auth().Call(ctx, method, path, token, body)
 	if err != nil {
 		return 0, err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	res, err := authHTTP.Do(req)
-	if err != nil {
-		return 0, err
-	}
-	defer res.Body.Close()
-	if res.StatusCode == http.StatusOK && out != nil {
-		if err := json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(out); err != nil {
+	if status == http.StatusOK && out != nil {
+		if err := json.Unmarshal(data, out); err != nil {
 			return 0, err
 		}
 	}
-	return res.StatusCode, nil
+	return status, nil
 }
 
 var authHTTP = &http.Client{Timeout: 5 * time.Second}

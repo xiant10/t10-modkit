@@ -8,6 +8,9 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
+
+	"github.com/xiant10/t10-modkit/docsmcp"
+	"github.com/xiant10/t10-modkit/httpjson"
 )
 
 // Tool is one agent tool. Run gets the person the agent acts for, never the agent's own rights.
@@ -51,9 +54,6 @@ func Schema(required []string, properties map[string]any) map[string]any {
 // The tools side of MCP over Streamable HTTP, with no session and no stream. Harnesses reach
 // it only through ai-gateway-tools, with a delegated token for the person they act for.
 
-// mcpVersions are the protocol versions spoken here, newest first.
-var mcpVersions = []string{"2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"}
-
 const (
 	rpcParseError     = -32700
 	rpcMethodNotFound = -32601
@@ -72,7 +72,7 @@ func (m *Module) mcp(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	// For harnesses through the gateway only, never for pages.
 	if r.Header.Get("Origin") != "" {
-		Reply(w, 403, map[string]string{"error": "forbidden"})
+		httpjson.Error(w, 403, "forbidden", "")
 		return
 	}
 	var message rpcMessage
@@ -86,15 +86,8 @@ func (m *Module) mcp(w http.ResponseWriter, r *http.Request) {
 	}
 	switch message.Method {
 	case "initialize":
-		var params struct {
-			ProtocolVersion string `json:"protocolVersion"`
-		}
-		_ = json.Unmarshal(message.Params, &params)
-		version := mcpVersions[0]
-		if slices.Contains(mcpVersions, params.ProtocolVersion) {
-			version = params.ProtocolVersion
-		}
-		rpcResult(w, message.ID, map[string]any{"protocolVersion": version, "capabilities": map[string]any{"tools": map[string]any{}},
+		// The protocol versions are docsmcp's, the ones every t10 server speaks.
+		rpcResult(w, message.ID, map[string]any{"protocolVersion": docsmcp.Negotiate(message.Params), "capabilities": map[string]any{"tools": map[string]any{}},
 			"serverInfo": map[string]any{"name": m.Service, "version": "1"}})
 	case "ping":
 		rpcResult(w, message.ID, map[string]any{})
