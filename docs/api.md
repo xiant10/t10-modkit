@@ -165,6 +165,49 @@ Request traces over OTLP/HTTP, as [ARCHITECTURE.md](../../ARCHITECTURE.md#teleme
 | `WithSession(handler)`, `SpanValue(s)` | The session marking on its own, and the check that a value is an identifier, not free text |
 | `Service()`, `Tracer()` | The name given to `Setup`, and its tracer |
 
+### `ontology`
+
+A module's ontology, as the workspace's [`contracts/ontology/README.md`](../../contracts/ontology/README.md) defines it: the descriptor at `GET /v1/ontology`, the object, action, undo and proposal routes, and the generated agent tools, all built from one set of declarations so they can't drift. It owns plumbing and never truth: it opens no database connection and decides no authority, and every read and write goes through functions the module supplies, which apply its own scope, field rules and command path. It's generic over the module's own caller type, so `Registry[auth.Caller]` and `Registry[module.Caller]` fit alike.
+
+```go
+reg := ontology.New(ontology.Options[Caller]{
+	Module: "crm", Prefix: "crm", Version: 1, Restricted: []string{"deal.set_discount"},
+	Authenticate: auth, Who: who, Can: can, Tenant: tenantLayer, // Tenant only where tenants configure a schema
+	Proposals: proposals.Postgres{Pool: pool, Schema: "crm"}, Undo: undo.Postgres{Pool: pool, Schema: "crm"},
+})
+ontology.AddObject(reg, ontology.ObjectType[Caller, *Deal]{Name: "deal", Search: …, Get: …, View: …})
+ontology.AddAction(reg, ontology.ActionType[Caller, *Deal]{Name: "deal.set_stage", On: "deal", Agent: ontology.Propose, Apply: …})
+if err := reg.Check(); err != nil { … } // at startup and in a test
+ontology.Mount(mux, reg.Routes())
+```
+
+| Name | Does |
+| --- | --- |
+| `New(Options[C])`, `Options` | A registry. `Authenticate` reads a request's caller and whether its token is a person's or delegated; `Who` names the person; `Can` checks a business permission; `Tenant` answers the caller's tenant layer |
+| `AddObject(reg, ObjectType[C, R])` | An object type over the module's reads. `R` is its record type. `Search` answers up to `Limit+1` records after `After`, scope first; `Get` answers `ErrNotFound` for a record the caller can't reach; `View` is what the caller may see; `Follow` pages a link; `Sources` names a derived value's records |
+| `AddAction(reg, ActionType[C, R])` | An action over the module's command path: `Available` (a reason code or ""), `Validate`, `Apply` and, for an undo action, `Revert`. `R` is the record type of the type it acts on, `struct{}` for a create |
+| `reg.AddEvent(kind, on)` | An event kind the module posts |
+| `reg.Check()` | Every mistake in the declarations: the contract's rules on the core (titles, refs, interfaces, `undoable` needing undo and idempotent, `restricted` being `never`, no param setting a derived property) and missing functions or stores |
+| `reg.Core()`, `reg.Describe(ctx, c)` | The core, and the caller's descriptor with its tenant layer, which is refused when it does more than add |
+| `CheckCore(d)`, `CheckTenant(core, layer)` | The same rules as `contracts/ontology/descriptor.ts`, for a module's own tests, such as of a pack before it's published |
+| `reg.Routes()`, `reg.ProposalRoutes()`, `Mount(mux, routes)` | The contract's routes, each traced by its pattern. Every one but `/v1/ontology` refuses a delegated token with `401 person_token_required` |
+| `reg.Tools()`, `Tool[C]` | The generated MCP tools, as `docsmcp.Tool` values with a `Run`: `<prefix>_describe`, `_search`, `_get` and `_propose`, and `_act` when the core has an `undoable` action. The module's MCP server checks the grant holds `Tool.Action`, builds the person's caller narrowed by the grant, and calls `Run`. Results are marked as data, sensitive values masked, and filters or sorts on them refused |
+| `reg.GetObject`, `Search`, `Follow`, `Resolve`, `Validate`, `Apply`, `Undo`, `Propose`, `Proposals`, `Confirm`, `Dismiss` | What the routes and tools call, for a module's own handlers and tests |
+| `DecodeSearch(body, props, defaultSort, agent)`, `Query`, `Filter`, `Sort`, `Position` | The filter grammar, typed against a type's properties: what `Search` gets |
+| `Error`, `Fail(status, code, message)`, `ErrNotFound`, `ErrForbidden`, `ErrWrongState`, `ErrStaleRevision`, `ErrUndoConflict`, `ErrFilterNotAllowed`, … | Refusals with the contract's status and code. A module returns them, or its own `*Error` with the same code, and the routes and tools answer them as they are |
+| `IsAgent(ctx)`, `Masked` | Whether a call came through the tools, and what an agent sees in place of a sensitive value |
+| `ProposalStore`, `UndoStore`, `ProposalLife`, `ProposalLimit` | Where drafts, undo entries and idempotent answers live, the module's own database. Drafts last 7 days, 50 open per person |
+
+The flows are the registry's: confirming applies under the person's current rights with `via: "proposal"`; only the person an action was applied for can undo it, within its window, once; an idempotent action's replay answers the first result after checking rights again. Each store keeps the same rules.
+
+| Package | Does |
+| --- | --- |
+| `ontology/proposals` | `Memory`, and `Postgres{Pool, Schema}` over `<schema>.ontology_proposals`. `Migrations(schema, lock)` is its migration for `pgdb.Migrate`, in the module's own schema with the module's lock key |
+| `ontology/undo` | `Memory`, and `Postgres{Pool, Schema}` over `<schema>.ontology_undo` and `ontology_replays`, with `Migrations(schema, lock)` |
+| `ontology/client` | The Go client: `Client{Modules, Versions}` with `Load`, `Describe`, `Search`, `Get`, `Links`, `Resolve` (grouped by module, in the order given, naming the modules that didn't answer), `Validate`, `Apply`, `Undo`, `Proposals`, `Confirm`, `Dismiss`. It calls with the person's own token for this request, and refuses a delegated token (`act` or `grant` claim) or a service's own (no session) with `person_token_required` before sending. Errors keep their status and code |
+
+`ontology/testdata/ledgermod` is a small in-memory test module shaped like a sales module: private rows per rep, a pack as its tenant layer, a ledger with derived `stage`, `score` and `band`, `record.add` at `undoable`. The package's tests run every scenario the workspace's specs name for sales against it, and `ledgermod/stub` serves it over HTTP for the workspace's conformance suite. `ontology/testdata/client/fixture.json` is answers recorded from it, which both clients replay (`ONTOLOGY_RECORD=1 go test ./ontology/client` records it again).
+
 ### `httpjson`
 
 The JSON bodies of t10's APIs, and the one error body they answer with: `{"error": "<snake_case code>", "message": "<optional sentence>"}`. OAuth endpoints and OpenAI-compatible routes keep the shape their protocol fixes.
@@ -193,6 +236,8 @@ The JSON bodies of t10's APIs, and the one error body they answer with: `{"error
 | `ui.tsx` | `Dialog`, `Menu`, `Segmented`, `Setting`, `Skeleton`, `Empty`, `Avatar`, `CopyButton`, `Logo`, `ErrorBoundary`, `FeedbackProvider`, `useFeedback` |
 | `storage.ts` | `load`, `save` |
 | `layout.ts` | `useMedia`, `navigateOptions`, `RESULTS` |
+| `ontology.ts` | `OntologyClient` (`load`, `describe`, `search`, `get`, `links`, `resolve`, `validate`, `apply`, `undo`, `proposals`, `confirm`, `dismiss`, the Go client's operations), `workbenchModules`, `splitRef`, `propertiesOf`, `paramsOf`, `typeLabel`, `actionLabel`, `propertyLabel`, `formatValue`, `allowedActions`, `paramValue`, and the contract's types. Calls go through Workbench's `/api/modules/{id}` or the app's own `/api`, so the page holds no token; errors are `ApiError` with the module's status and code |
+| `ontology-ui.tsx` | `RefChip` (a reference that didn't resolve is plain text, with no link), `ObjectCard`, `ObjectTable`, `ActionForm`, `ProposalCard`: any module's objects, actions and drafts, drawn from its descriptor in the reader's language, showing only allowed actions. Their words (Confirm, Dismiss, Cancel, For you to confirm, and the error codes) come from the app's catalog |
 | `app.css` | The tokens and components |
 
 An app's server answers the routes the kit calls: `GET`, `PUT /api/preferences`, `GET /auth/session`, `POST /auth/logout`, `POST /auth/tenant`, and its own `GET /v1/me/nav` through the module proxy.
