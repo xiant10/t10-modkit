@@ -1489,3 +1489,17 @@ label > input, label > select, label > textarea { color: var(--text); font-size:
 .automation-chevron { vertical-align: middle; color: var(--muted); }
 .automation-chevron.open { transform: rotate(180deg); }
 .automation-detail h3 { margin-top: 1rem; }
+
+/* ontology-ui.tsx: any module's objects, actions and proposals. */
+.ontology-ref { max-width: 100%; }
+.ontology-card, .ontology-proposal { display: grid; gap: 0.5rem; }
+.ontology-card h3, .ontology-proposal h3, .ontology-form h3 { margin: 0; font-size: 1rem; }
+.ontology-type { margin: 0; color: var(--muted); font-size: 0.78rem; }
+.ontology-properties { display: grid; grid-template-columns: minmax(6rem, max-content) 1fr; gap: 0.25rem 0.9rem; margin: 0; }
+.ontology-properties > div { display: contents; }
+.ontology-properties dt { color: var(--muted); }
+.ontology-properties dd { margin: 0; overflow-wrap: anywhere; }
+.ontology-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.ontology-table th, .ontology-table td { text-align: left; padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--line); }
+.ontology-table th { color: var(--muted); font-weight: 600; }
+.ontology-table .link-button { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; cursor: pointer; text-align: left; }

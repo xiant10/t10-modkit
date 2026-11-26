@@ -5,7 +5,7 @@
 TEST_DATABASE_URL ?= postgres://postgres:test@localhost:55432/test?sslmode=disable
 GO_FILES = $(shell git ls-files '*.go' | grep -v '^third_party/')
 
-.PHONY: build lint test ci test-db db-up db-down
+.PHONY: build lint test test-web ci test-db db-up db-down
 
 build:
 	go build ./...
@@ -17,8 +17,12 @@ lint:
 	@out=$$("$$(go env GOROOT)/bin/gofmt" -l $(GO_FILES)); [ -z "$$out" ] || { echo "gofmt -w these:"; echo "$$out"; exit 1; }
 
 # Database tests skip.
-test:
+test: test-web
 	TEST_DATABASE_URL= go test ./...
+
+# The web kit's ontology client, against the Go client's recorded answers (Node 24).
+test-web:
+	node --test ontology/testdata/client/replay.test.ts
 
 # Each test rebuilds its schema, so packages run one at a time.
 test-db:
@@ -33,4 +37,4 @@ db-up:
 db-down:
 	@docker rm -f t10-test-pg >/dev/null
 
-ci: lint build test-db
+ci: lint build test-web test-db

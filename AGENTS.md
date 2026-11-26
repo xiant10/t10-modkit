@@ -1,12 +1,12 @@
 # AGENTS.md
 
-For coding agents working in this repo. Shared Go and web plumbing for t10 modules and web apps: people, ids, page, websession, frame, docsmcp, pgdb, telemetry, httpjson, and the web kit.
+For coding agents working in this repo. Shared Go and web plumbing for t10 modules and web apps: people, ids, page, websession, frame, docsmcp, pgdb, telemetry, httpjson, ontology, and the web kit.
 
 ## Build and test
 
 ```bash
 make lint      # go vet, gofmt
-make test      # needs nothing running; database tests skip
+make test      # needs nothing running; database tests skip (Node 24 for the web kit's ontology test)
 make db-up     # the throwaway Postgres on 55432 that every t10 repo's tests share
 make test-db   # every test, against it, one package at a time
 make ci        # what CI runs
