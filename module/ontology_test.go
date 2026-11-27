@@ -104,3 +104,13 @@ func TestOntologyTools(t *testing.T) {
 		t.Errorf("crm_propose without crm:propose: %d", code)
 	}
 }
+
+func TestOntologyToolsRefuseMissingArguments(t *testing.T) {
+	m := withOntology(Fake{Caller: admin})
+	for _, name := range []string{"crm_search", "crm_get", "crm_propose"} {
+		_, body := serve(t, m, "POST", "/mcp", "agent", call(name, `{}`))
+		if got := fmtJSON(body); !strings.Contains(got, "invalid_arguments") {
+			t.Errorf("%s without its required argument: %s", name, got)
+		}
+	}
+}
