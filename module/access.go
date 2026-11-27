@@ -31,6 +31,8 @@ type Caller struct {
 	TenantAdmin      bool
 	// Permissions are this module's permissions the person holds, such as crm:admin.
 	Permissions []string
+	// Agent is the runtime account of the agent acting for the person, empty for the person.
+	Agent string
 }
 
 // Access checks who a request is for. Auth is the real one; tests use Fake.
@@ -108,7 +110,9 @@ func (a *Auth) Person(ctx context.Context, header string) (Caller, error) {
 	if live.UserID != who.UserID || live.Tenant != who.TenantID {
 		return Caller{}, ErrForbidden
 	}
-	return a.entitled(ctx, who.TenantID, who.UserID)
+	c, err := a.entitled(ctx, who.TenantID, who.UserID)
+	c.Agent = who.Agent.Runtime
+	return c, err
 }
 
 func (a *Auth) Agent(ctx context.Context, header, action string) (Caller, error) {

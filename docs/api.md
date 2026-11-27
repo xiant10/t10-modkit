@@ -217,10 +217,12 @@ What every business module's service answers, for modules made from t10-template
 
 | Name | Does |
 | --- | --- |
-| `Module{ID, Service, Label, LabelZH, PublicURL, Sections, Notifier, Access, Ping, Tools}`, `Register(mux)` | One module's service, and the routes every module answers |
+| `Module{ID, Service, Label, LabelZH, PublicURL, Sections, Notifier, Access, Ping, Tools, Ontology}`, `Register(mux)` | One module's service, and the routes every module answers. The manifest's `features` lists `ontology` when it has one |
+| `m.NewOntology(ontology.Options[Caller])` | The module's ontology, served beside the rest: `Register` mounts its routes (and panics on a descriptor `CheckCore` refuses), and `/mcp` lists its generated tools after `Tools`, each needing its own grant action (`<id>:read`, `<id>:propose`, `<id>:act`). `Module`, `Prefix`, `Authenticate` (a person's token, or for the descriptor an agent's that allows `<id>:read`), `Who` and `Can` (a tenant admin, or the permission held) come from the module when unset |
 | `Person(w, r)`, `PersonPage(w, r)`, `Token(r)` | The signed-in person, from a bearer token or the session cookie; a page sends a browser that isn't signed in to sign-in |
 | `View`, `Page`, `Styles` | A server-drawn page in the shared frame |
-| `Access`, `Auth`, `NewAuth(module, service)`, `Fake` | Who a request is for: auth-server, or a stand-in that accepts `Bearer person`, `Bearer person:<perms>`, `Bearer agent` and `Bearer agent:<perms>` |
+| `Caller` | The person a request is for: tenant, user, whether they administer the tenant, their permissions here, and `Agent`, the runtime account of an agent acting for them |
+| `Access`, `Auth`, `NewAuth(module, service)`, `Fake` | Who a request is for: auth-server, or a stand-in that accepts `Bearer person`, `Bearer person:<perms>`, `Bearer agent` and `Bearer agent:<perms>` (with `Agent` "agent") |
 | `Service`, `Member` | What a module does as itself: its own token, and a tenant's members |
 | `Tool`, `Args`, `Schema` | An agent tool, its arguments, and its input schema. Results are marked as data |
 | `Reply`, `Refuse` | A JSON answer, and an Access error as 401, 403 or 503 |
