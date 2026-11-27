@@ -222,7 +222,7 @@ What every business module's service answers, for modules made from t10-template
 | `Person(w, r)`, `PersonPage(w, r)`, `Token(r)` | The signed-in person, from a bearer token or the session cookie; a page sends a browser that isn't signed in to sign-in |
 | `View`, `Page`, `Styles` | A server-drawn page in the shared frame |
 | `Caller` | The person a request is for: tenant, user, whether they administer the tenant, their permissions here, and `Agent`, the runtime account of an agent acting for them |
-| `Access`, `Auth`, `NewAuth(module, service)`, `Fake` | Who a request is for: auth-server, or a stand-in that accepts `Bearer person`, `Bearer person:<perms>`, `Bearer agent` and `Bearer agent:<perms>` (with `Agent` "agent") |
+| `Access`, `Auth`, `NewAuth(module, service)`, `Fake` | Who a request is for: auth-server, or a stand-in that accepts `Bearer person`, `Bearer person:<perms>`, `Bearer person@<user>[:<perms>]` (another person in the same tenant, for a module whose records are each person's own), `Bearer agent` and `Bearer agent:<perms>` (with `Agent` "agent") |
 | `Service`, `Member` | What a module does as itself: its own token, and a tenant's members |
 | `Tool`, `Args`, `Schema` | An agent tool, its arguments, and its input schema. Results are marked as data |
 | `Reply`, `Refuse` | A JSON answer, and an Access error as 401, 403 or 503 |

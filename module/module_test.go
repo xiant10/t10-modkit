@@ -156,6 +156,16 @@ func TestStandaloneOnlyAlone(t *testing.T) {
 	if err != nil || c.TenantAdmin || len(c.Permissions) != 2 || c.Permissions[0] != "crm:read" {
 		t.Errorf("standalone member with permissions: %v %+v", err, c)
 	}
+	other, err := access.Person(context.Background(), "Bearer person@usr_other:crm:read")
+	if err != nil || other.UserID != "usr_other" || other.TenantID != c.TenantID || other.TenantAdmin || len(other.Permissions) != 1 {
+		t.Errorf("standalone: another person in the tenant: %v %+v", err, other)
+	}
+	if plain, err := access.Person(context.Background(), "Bearer person@usr_other"); err != nil || plain.UserID != "usr_other" || len(plain.Permissions) != 0 {
+		t.Errorf("standalone: another person with no permissions: %v %+v", err, plain)
+	}
+	if _, err := access.Person(context.Background(), "Bearer person@"); err == nil {
+		t.Error("standalone: a person with no user")
+	}
 	t.Setenv("AUTH_ISSUER", "http://auth.example")
 	if _, err := NewAccess("crm", "t10-crm"); err == nil {
 		t.Error("standalone mode started beside AUTH_ISSUER")
