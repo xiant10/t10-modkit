@@ -23,7 +23,12 @@ type Tool struct {
 	ReadOnly bool
 	Schema   map[string]any
 	Run      func(ctx context.Context, c Caller, args json.RawMessage) (any, error)
+	// result answers the MCP result itself, for the ontology's generated tools.
+	result func(ctx context.Context, c Caller, args json.RawMessage) map[string]any
 }
+
+// tools are the module's own tools, then its ontology's.
+func (m *Module) tools() []Tool { return append(slices.Clip(m.Tools), m.ontologyTools()...) }
 
 // ErrBadArguments is what Run returns when the arguments don't fit; Args returns it for you.
 var ErrBadArguments = errors.New("the arguments don't fit this tool")
@@ -93,7 +98,7 @@ func (m *Module) mcp(w http.ResponseWriter, r *http.Request) {
 		rpcResult(w, message.ID, map[string]any{})
 	case "tools/list":
 		listed := []map[string]any{}
-		for _, t := range m.Tools {
+		for _, t := range m.tools() {
 			listed = append(listed, map[string]any{"name": t.Name, "description": t.Description, "inputSchema": t.Schema,
 				"annotations": map[string]any{"readOnlyHint": t.ReadOnly}})
 		}
@@ -114,14 +119,15 @@ func (m *Module) call(w http.ResponseWriter, r *http.Request, message rpcMessage
 		rpcError(w, 200, message.ID, rpcInvalidParams, "params aren't valid")
 		return
 	}
-	i := slices.IndexFunc(m.Tools, func(t Tool) bool { return t.Name == params.Name })
+	tools := m.tools()
+	i := slices.IndexFunc(tools, func(t Tool) bool { return t.Name == params.Name })
 	// Check the token before saying whether the tool exists: for an unknown one, against the
 	// first tool's action.
 	action := m.ID + ":read"
 	if i >= 0 {
-		action = m.Tools[i].Action
-	} else if len(m.Tools) > 0 {
-		action = m.Tools[0].Action
+		action = tools[i].Action
+	} else if len(tools) > 0 {
+		action = tools[0].Action
 	}
 	c, err := m.Access.Agent(r.Context(), r.Header.Get("Authorization"), action)
 	if errors.Is(err, ErrUnauthorized) || errors.Is(err, ErrForbidden) {
@@ -136,7 +142,11 @@ func (m *Module) call(w http.ResponseWriter, r *http.Request, message rpcMessage
 		rpcError(w, 200, message.ID, rpcInvalidParams, "unknown tool")
 		return
 	}
-	out, err := m.Tools[i].Run(r.Context(), c, params.Arguments)
+	if tools[i].result != nil {
+		rpcResult(w, message.ID, tools[i].result(r.Context(), c, params.Arguments))
+		return
+	}
+	out, err := tools[i].Run(r.Context(), c, params.Arguments)
 	if errors.Is(err, ErrBadArguments) {
 		rpcResult(w, message.ID, toolFailure("invalid_arguments", "check the arguments against the tool's schema; don't repeat the same call"))
 		return

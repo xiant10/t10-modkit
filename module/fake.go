@@ -13,7 +13,7 @@ import (
 
 // Fake stands in for auth-server in a module's tests: "Bearer person" is Caller signed in,
 // "Bearer person:p1,p2" is a non-admin member holding those permissions, "Bearer agent" is an
-// agent acting for Caller with Actions (any action when nil), and "Bearer agent:p1,p2" is an
+// agent (Caller.Agent "agent") acting for Caller with Actions (any action when nil), and "Bearer agent:p1,p2" is an
 // agent acting for a non-admin member holding those permissions; anything else is refused. Down
 // makes everything unavailable, as when auth-server is down.
 type Fake struct {
@@ -59,9 +59,13 @@ func (f Fake) Agent(_ context.Context, header, action string) (Caller, error) {
 	case f.Down:
 		return Caller{}, ErrUnavailable
 	case header == "Bearer agent" && allowed:
-		return f.Caller, nil
+		c := f.Caller
+		c.Agent = "agent"
+		return c, nil
 	case strings.HasPrefix(header, "Bearer agent:") && allowed:
-		return f.member(strings.TrimPrefix(header, "Bearer agent:")), nil
+		c := f.member(strings.TrimPrefix(header, "Bearer agent:"))
+		c.Agent = "agent"
+		return c, nil
 	case header == "":
 		return Caller{}, ErrUnauthorized
 	}

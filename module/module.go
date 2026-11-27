@@ -4,8 +4,7 @@
 // frame, with a person's token and an agent's delegated token checked against auth-server
 // (platform/docs/module.md in the project).
 //
-// It's the template's (kit/go/), shared by every module whose code is in the project, so a fix
-// here reaches each of them with `make template-update`.
+// Modules made from t10-template require it at the tag the template pins (T10_MODKIT).
 package module
 
 import (
@@ -17,6 +16,7 @@ import (
 
 	"github.com/xiant10/t10-modkit/frame"
 	"github.com/xiant10/t10-modkit/httpjson"
+	"github.com/xiant10/t10-modkit/ontology"
 )
 
 // Module is one module's service: who it is, how it checks callers, and its tools.
@@ -34,6 +34,8 @@ type Module struct {
 	// Ping reports whether what it needs, such as its database, answers; nil means nothing.
 	Ping  func(context.Context) error
 	Tools []Tool
+	// Ontology is the module's ontology, from NewOntology; nil when it has none.
+	Ontology *ontology.Registry[Caller]
 }
 
 // Register adds the routes every module answers to mux. The module adds its own beside them.
@@ -52,6 +54,12 @@ func (m *Module) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /signed-out", m.signedOut)
 	mux.HandleFunc("POST /frame/language", m.savePreference("lang", validLang))
 	mux.HandleFunc("POST /frame/theme", m.savePreference("theme", frame.ValidTheme))
+	if m.Ontology != nil {
+		if err := m.Ontology.Check(); err != nil {
+			panic("the " + m.ID + " ontology: " + err.Error())
+		}
+		ontology.Mount(mux, m.Ontology.Routes())
+	}
 }
 
 func (m *Module) ready(w http.ResponseWriter, r *http.Request) {
@@ -78,7 +86,7 @@ func (m *Module) manifest(w http.ResponseWriter, r *http.Request) {
 		app["nav"] = m.Sections
 	}
 	Reply(w, 200, map[string]any{
-		"id": m.ID, "api_version": 1, "action_prefix": m.ID, "enabled": true, "app": app,
+		"id": m.ID, "api_version": 1, "action_prefix": m.ID, "enabled": true, "app": app, "features": m.features(),
 	})
 }
 
