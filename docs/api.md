@@ -187,7 +187,7 @@ ontology.Mount(mux, reg.Routes())
 | Name | Does |
 | --- | --- |
 | `New(Options[C])`, `Options` | A registry. `Authenticate` reads a request's caller and whether its token is a person's or delegated; `Who` names the person; `Can` checks a business permission; `Tenant` answers the caller's tenant layer; `Errors` maps the module's own errors, such as its store's not-found, to the contract's |
-| `AddObject(reg, ObjectType[C, R])` | An object type over the module's reads. `R` is its record type. `Search` answers up to `Limit+1` records after `After`, scope first; `Get` answers `ErrNotFound` for a record the caller can't reach; `View` is what the caller may see; `Follow` pages a link; `Sources` names a derived value's records |
+| `AddObject(reg, ObjectType[C, R])` | An object type over the module's reads. `R` is its record type. `Search` answers up to `Limit+1` records after `After`, scope first; `Get` answers `ErrNotFound` for a record the caller can't reach; `View` is what the caller may see; `Follow` pages a link; `Sources` names a derived value's records. `DefaultSort` must be one of its properties and not a sensitive one, since a page's cursor carries the sort value |
 | `AddAction(reg, ActionType[C, R])` | An action over the module's command path: `Available` (a reason code or ""), `Validate`, `Apply` and, for an undo action, `Revert`. `R` is the record type of the type it acts on, `struct{}` for a create |
 | `reg.AddEvent(kind, on)` | An event kind the module posts |
 | `reg.Check()` | Every mistake in the declarations: the contract's rules on the core (titles, refs, interfaces, `undoable` needing undo and idempotent, `restricted` being `never`, no param setting a derived property) and missing functions or stores |
@@ -199,7 +199,7 @@ ontology.Mount(mux, reg.Routes())
 | `DecodeSearch(body, props, defaultSort, agent)`, `Query`, `Filter`, `Sort`, `Position` | The filter grammar, typed against a type's properties: what `Search` gets |
 | `Error`, `Fail(status, code, message)`, `ErrNotFound`, `ErrForbidden`, `ErrWrongState`, `ErrStaleRevision`, `ErrUndoConflict`, `ErrFilterNotAllowed`, … | Refusals with the contract's status and code. A module returns them, or its own `*Error` with the same code, and the routes and tools answer them as they are |
 | `IsAgent(ctx)`, `Masked` | Whether a call came through the tools, and what an agent sees in place of a sensitive value |
-| `ProposalStore`, `UndoStore`, `ProposalLife`, `ProposalLimit` | Where drafts, undo entries and idempotent answers live, the module's own database. Drafts last 7 days, 50 open per person |
+| `ProposalStore`, `UndoStore`, `ProposalLife`, `ProposalLimit` | Where drafts, undo entries and idempotent answers live, the module's own database. Drafts last 7 days, 50 open per person. An idempotent action claims its key before it runs, so two requests with one key never both apply it: the second answers 409 `request_in_progress` until the first has answered. A failed apply gives the key back; one that failed after its change keeps it claimed |
 
 The flows are the registry's: confirming applies under the person's current rights with `via: "proposal"`; only the person an action was applied for can undo it, within its window, once; an idempotent action's replay answers the first result after checking rights again. Each store keeps the same rules.
 
