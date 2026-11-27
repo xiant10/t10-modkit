@@ -122,6 +122,8 @@ export interface Proposal {
 	id: string;
 	action: string;
 	object?: string;
+	/** The object's revision when the draft was made: confirming after it changed is 409 stale_revision. */
+	revision?: number;
 	params: Record<string, unknown>;
 	agent: string;
 	created_at: string;
