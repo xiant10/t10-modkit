@@ -62,6 +62,11 @@ func (f Fake) Agent(_ context.Context, header, action string) (Caller, error) {
 		c := f.Caller
 		c.Agent = "agent"
 		return c, nil
+	// An agent whose grant holds only the module's read action, for make contract's grant check.
+	case header == "Bearer agent-read" && allowed && strings.HasSuffix(action, ":read"):
+		c := f.Caller
+		c.Agent = "agent"
+		return c, nil
 	case strings.HasPrefix(header, "Bearer agent:") && allowed:
 		c := f.member(strings.TrimPrefix(header, "Bearer agent:"))
 		c.Agent = "agent"
@@ -75,7 +80,8 @@ func (f Fake) Agent(_ context.Context, header, action string) (Caller, error) {
 // NewAccess is how a module's service checks callers: Auth against auth-server, from the
 // settings the project's standard wiring gives every module, or, with T10_STANDALONE=1, a Fake
 // for running the module alone (`make alone`), with no foundation: "Bearer person" is a tenant
-// admin, "Bearer agent" an agent acting for them with any action. Standalone mode refuses to
+// admin, "Bearer agent" an agent acting for them with any action, and "Bearer agent-read" one whose
+// grant holds only <id>:read. Standalone mode refuses to
 // start when AUTH_ISSUER is set, as it is wherever the module runs with the foundation, so it
 // can't be switched on there.
 func NewAccess(module, service string) (Access, error) {

@@ -98,6 +98,14 @@ func TestOntologyTools(t *testing.T) {
 	if got := fmtJSON(body); !strings.Contains(got, "Second") || !strings.Contains(got, `"agent"`) {
 		t.Errorf("the draft, naming the agent: %s", got)
 	}
+	// Standalone's read-only agent reads, and can't draft.
+	_, body = serve(t, m, "POST", "/mcp", "agent-read", call("crm_get", `{"ref":"crm:note:n1"}`))
+	if got := fmtJSON(body); !strings.Contains(got, "First") {
+		t.Errorf("crm_get as agent-read: %s", got)
+	}
+	if code, _ := serve(t, m, "POST", "/mcp", "agent-read", call("crm_propose", `{"action":"note.create","params":{"title":"x"}}`)); code != 403 {
+		t.Errorf("crm_propose as agent-read: %d", code)
+	}
 	// The grant needs the tool's own action.
 	narrow := withOntology(Fake{Caller: admin, Actions: []string{"crm:read"}})
 	if code, _ := serve(t, narrow, "POST", "/mcp", "agent", call("crm_propose", `{"action":"note.create","params":{"title":"x"}}`)); code != 403 {
