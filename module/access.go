@@ -110,9 +110,7 @@ func (a *Auth) Person(ctx context.Context, header string) (Caller, error) {
 	if live.UserID != who.UserID || live.Tenant != who.TenantID {
 		return Caller{}, ErrForbidden
 	}
-	c, err := a.entitled(ctx, who.TenantID, who.UserID)
-	c.Agent = who.Agent.Runtime
-	return c, err
+	return a.entitled(ctx, who.TenantID, who.UserID)
 }
 
 func (a *Auth) Agent(ctx context.Context, header, action string) (Caller, error) {
@@ -137,7 +135,9 @@ func (a *Auth) Agent(ctx context.Context, header, action string) (Caller, error)
 			return Caller{}, ErrForbidden
 		}
 	}
-	return a.entitled(ctx, who.TenantID, who.UserID)
+	c, err := a.entitled(ctx, who.TenantID, who.UserID)
+	c.Agent = who.Agent.Runtime
+	return c, err
 }
 
 // Ready gets this service's own token and verifies it, so /readyz fails until auth-server
