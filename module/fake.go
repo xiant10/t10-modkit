@@ -47,6 +47,16 @@ func (f Fake) Person(_ context.Context, header string) (Caller, error) {
 		return f.Caller, nil
 	case strings.HasPrefix(header, "Bearer person:"):
 		return f.member(strings.TrimPrefix(header, "Bearer person:")), nil
+	// Another person in the same tenant, not its admin, with the permissions after a colon:
+	// for a module whose records are each person's own, so a test can be someone else.
+	case strings.HasPrefix(header, "Bearer person@"):
+		user, perms, _ := strings.Cut(strings.TrimPrefix(header, "Bearer person@"), ":")
+		if user == "" {
+			return Caller{}, ErrForbidden
+		}
+		c := f.member(perms)
+		c.UserID = user
+		return c, nil
 	case header == "":
 		return Caller{}, ErrUnauthorized
 	}
@@ -80,8 +90,8 @@ func (f Fake) Agent(_ context.Context, header, action string) (Caller, error) {
 // NewAccess is how a module's service checks callers: Auth against auth-server, from the
 // settings the project's standard wiring gives every module, or, with T10_STANDALONE=1, a Fake
 // for running the module alone (`make alone`), with no foundation: "Bearer person" is a tenant
-// admin, "Bearer agent" an agent acting for them with any action, and "Bearer agent-read" one whose
-// grant holds only <id>:read. Standalone mode refuses to
+// admin, "Bearer person@usr_x" another person in the same tenant, "Bearer agent" an agent acting
+// for the admin with any action, and "Bearer agent-read" one whose grant holds only <id>:read. Standalone mode refuses to
 // start when AUTH_ISSUER is set, as it is wherever the module runs with the foundation, so it
 // can't be switched on there.
 func NewAccess(module, service string) (Access, error) {
