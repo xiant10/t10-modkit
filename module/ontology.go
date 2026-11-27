@@ -29,7 +29,9 @@ func (m *Module) NewOntology(o ontology.Options[Caller]) *ontology.Registry[Call
 		o.Who = func(c Caller) ontology.Who { return ontology.Who{Tenant: c.TenantID, User: c.UserID} }
 	}
 	if o.Can == nil {
-		o.Can = func(c Caller, permission string) bool { return c.TenantAdmin || slices.Contains(c.Permissions, permission) }
+		o.Can = func(c Caller, permission string) bool {
+			return c.TenantAdmin || slices.Contains(c.Permissions, permission)
+		}
 	}
 	m.Ontology = ontology.New(o)
 	return m.Ontology
