@@ -268,3 +268,5 @@ The JSON bodies of t10's APIs, and the one error body they answer with: `{"error
 | `app.css` | The tokens and components |
 
 An app's server answers the routes the kit calls: `GET`, `PUT /api/preferences`, `GET /auth/session`, `POST /auth/logout`, `POST /auth/tenant`, and its own `GET /v1/me/nav` through the module proxy.
+
+Why `module` and `verifier` live here and are published by tag: [module-design.md](module-design.md).
