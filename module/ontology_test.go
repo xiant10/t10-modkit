@@ -83,8 +83,9 @@ func TestOntologyTools(t *testing.T) {
 			t.Errorf("tools/list has no %s: %s", name, listed)
 		}
 	}
-	if strings.Contains(listed, "crm_act") {
-		t.Error("crm_act is listed without an undoable action")
+	// note.create is a propose action, which an agent applies when the person lets it.
+	if !strings.Contains(listed, `"crm_act"`) {
+		t.Error("crm_act isn't listed beside a propose action")
 	}
 	_, body = serve(t, m, "POST", "/mcp", "agent", call("crm_get", `{"ref":"crm:note:n1"}`))
 	if got := fmtJSON(body); !strings.Contains(got, "First") || strings.Contains(got, "isError") {
@@ -110,6 +111,42 @@ func TestOntologyTools(t *testing.T) {
 	narrow := withOntology(Fake{Caller: admin, Actions: []string{"crm:read"}})
 	if code, _ := serve(t, narrow, "POST", "/mcp", "agent", call("crm_propose", `{"action":"note.create","params":{"title":"x"}}`)); code != 403 {
 		t.Errorf("crm_propose without crm:propose: %d", code)
+	}
+}
+
+func TestOntologyAutoApply(t *testing.T) {
+	m := withOntology(Fake{Caller: admin})
+	if _, body := serve(t, m, "GET", "/v1/module", "person", ""); !strings.Contains(fmtJSON(body["features"]), "auto_apply") {
+		t.Errorf("the manifest doesn't list auto_apply: %v", body["features"])
+	}
+	act := call("crm_act", `{"action":"note.create","params":{"title":"Third"},"request_id":"request-0001"}`)
+	// Without crm:apply the agent drafts it.
+	_, body := serve(t, m, "POST", "/mcp", "agent", act)
+	if got := fmtJSON(body); !strings.Contains(got, "not_allowed_for_agents") {
+		t.Errorf("crm_act without crm:apply: %s", got)
+	}
+	_, body = serve(t, m, "POST", "/mcp", "agent", call("crm_describe", `{}`))
+	if got := fmtJSON(body); !strings.Contains(got, `\"agent_applies\":false`) {
+		t.Errorf("crm_describe without crm:apply: %s", got)
+	}
+	// With it, the agent applies it, once for a retried request, and the person sees it in done.
+	for range 2 {
+		_, body = serve(t, m, "POST", "/mcp", "agent-apply", act)
+		if got := fmtJSON(body); strings.Contains(got, "isError") {
+			t.Errorf("crm_act with crm:apply: %s", got)
+		}
+	}
+	_, body = serve(t, m, "POST", "/mcp", "agent-apply", call("crm_describe", `{}`))
+	if got := fmtJSON(body); !strings.Contains(got, `\"agent_applies\":true`) {
+		t.Errorf("crm_describe with crm:apply: %s", got)
+	}
+	code, body := serve(t, m, "GET", "/v1/done", "person", "")
+	done, _ := body["done"].([]any)
+	if code != 200 || len(done) != 1 || !strings.Contains(fmtJSON(done[0]), "note.create") || strings.Contains(fmtJSON(done[0]), "undo_id") {
+		t.Errorf("done after a retried apply: %d %v", code, body)
+	}
+	if code, _ := serve(t, m, "GET", "/v1/done", "agent", ""); code != 401 {
+		t.Errorf("done for an agent: %d", code)
 	}
 }
 
