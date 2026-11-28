@@ -19,7 +19,7 @@ make ci        # what CI runs
 
 ## Rules
 
-- Consumers carry snapshots, never an import of this checkout: after a change, run the workspace's `scripts/sync-modkit.sh` and commit the snapshot in each consumer. Its web-kit loop overwrites `web/src/kit` in workbench and t10-property, so check that diff first.
+- Consumers carry snapshots, never an import of this checkout: after a change, run the workspace's `scripts/sync-modkit.sh` and commit the snapshot in each consumer. Its web-kit loop overwrites `web/src/kit` in workbench, so check that diff first.
 - No business rule belongs here, only cross-cutting code.
 - Its docs have no server: `t10-docs` serves them.
 - A route change updates `docs/api.md` (and `docs/openapi.yaml` where there is one) in the same change.
