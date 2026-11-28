@@ -130,6 +130,16 @@ export interface Proposal {
 	expires_at: string;
 }
 
+/** An applied action the person can still undo, until expires_at. agent is set when an agent applied it with its _act tool. */
+export interface Undoable {
+	id: string;
+	action: string;
+	object?: string;
+	agent?: string;
+	created_at: string;
+	expires_at: string;
+}
+
 export interface ConfirmRequest {
 	params?: Record<string, unknown>;
 	revision?: number;
@@ -313,6 +323,11 @@ export class OntologyClient {
 
 	undo(module: string, id: string): Promise<ApplyAnswer> {
 		return this.call(this.module(module), "POST", `/v1/undo/${encodeURIComponent(id)}`, {});
+	}
+
+	/** The person's applied actions in a module that can still be undone, newest first. */
+	async undos(module: string): Promise<Undoable[]> {
+		return (await this.call<{ undo: Undoable[] }>(this.module(module), "GET", "/v1/undo")).undo;
 	}
 
 	async proposals(module: string): Promise<Proposal[]> {
