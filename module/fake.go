@@ -14,8 +14,10 @@ import (
 // Fake stands in for auth-server in a module's tests: "Bearer person" is Caller signed in,
 // "Bearer person:p1,p2" is a non-admin member holding those permissions, "Bearer agent" is an
 // agent (Caller.Agent "agent") acting for Caller with Actions (any action when nil), and "Bearer agent:p1,p2" is an
-// agent acting for a non-admin member holding those permissions; anything else is refused. Down
-// makes everything unavailable, as when auth-server is down.
+// agent acting for a non-admin member holding those permissions; anything else is refused. An
+// agent's grant never holds an <id>:apply action unless Actions names it, except "Bearer
+// agent-apply"'s, which holds every action, as when the person let their assistant act without
+// asking. Down makes everything unavailable, as when auth-server is down.
 type Fake struct {
 	Caller  Caller
 	Actions []string
@@ -64,22 +66,33 @@ func (f Fake) Person(_ context.Context, header string) (Caller, error) {
 }
 
 func (f Fake) Agent(_ context.Context, header, action string) (Caller, error) {
-	allowed := f.Actions == nil || slices.Contains(f.Actions, action)
+	allows := func(a string) bool {
+		if f.Actions == nil {
+			return !strings.HasSuffix(a, ":apply")
+		}
+		return slices.Contains(f.Actions, a)
+	}
+	allowed := allows(action)
 	switch {
 	case f.Down:
 		return Caller{}, ErrUnavailable
 	case header == "Bearer agent" && allowed:
 		c := f.Caller
-		c.Agent = "agent"
+		c.Agent, c.grants = "agent", allows
+		return c, nil
+	// An agent whose grant also holds every <id>:apply: the person let it act without asking.
+	case header == "Bearer agent-apply":
+		c := f.Caller
+		c.Agent, c.grants = "agent", func(string) bool { return true }
 		return c, nil
 	// An agent whose grant holds only the module's read action, for make contract's grant check.
 	case header == "Bearer agent-read" && allowed && strings.HasSuffix(action, ":read"):
 		c := f.Caller
-		c.Agent = "agent"
+		c.Agent, c.grants = "agent", func(a string) bool { return strings.HasSuffix(a, ":read") }
 		return c, nil
 	case strings.HasPrefix(header, "Bearer agent:") && allowed:
 		c := f.member(strings.TrimPrefix(header, "Bearer agent:"))
-		c.Agent = "agent"
+		c.Agent, c.grants = "agent", allows
 		return c, nil
 	case header == "":
 		return Caller{}, ErrUnauthorized
@@ -91,7 +104,8 @@ func (f Fake) Agent(_ context.Context, header, action string) (Caller, error) {
 // settings the project's standard wiring gives every module, or, with T10_STANDALONE=1, a Fake
 // for running the module alone (`make alone`), with no foundation: "Bearer person" is a tenant
 // admin, "Bearer person@usr_x" another person in the same tenant, "Bearer agent" an agent acting
-// for the admin with any action, and "Bearer agent-read" one whose grant holds only <id>:read. Standalone mode refuses to
+// for the admin with any action but <id>:apply, "Bearer agent-apply" one that also holds
+// <id>:apply, and "Bearer agent-read" one whose grant holds only <id>:read. Standalone mode refuses to
 // start when AUTH_ISSUER is set, as it is wherever the module runs with the foundation, so it
 // can't be switched on there.
 func NewAccess(module, service string) (Access, error) {

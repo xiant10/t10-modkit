@@ -54,6 +54,8 @@ export interface ActionType {
 	undo: boolean;
 	undo_window?: number;
 	agent: Tier;
+	/** Only in an agent's describe: whether this agent may apply it now with <prefix>_act. */
+	agent_applies?: boolean;
 }
 
 export interface TenantLayer {
@@ -140,6 +142,20 @@ export interface Undoable {
 	expires_at: string;
 }
 
+/**
+ * Something an agent applied for the person with its _act tool, in the last 7 days, whether or not it can be undone.
+ * undo_id and undo_expires_at are there while it can still be undone.
+ */
+export interface Done {
+	id: string;
+	action: string;
+	object?: string;
+	agent: string;
+	created_at: string;
+	undo_id?: string;
+	undo_expires_at?: string;
+}
+
 export interface ConfirmRequest {
 	params?: Record<string, unknown>;
 	revision?: number;
@@ -155,6 +171,8 @@ export interface Loaded {
 	descriptors: Record<string, Descriptor>;
 	/** The modules that didn't answer. */
 	unavailable: string[];
+	/** The loaded modules whose manifest lists auto_apply: a person may let their assistant apply its actions, and it serves done(). */
+	autoApply: string[];
 }
 
 export interface Resolved {
@@ -231,7 +249,7 @@ export class OntologyClient {
 	/** Reads each manifest, and the descriptor of each module that lists ontology with a supported api_version. */
 	async load(): Promise<Loaded> {
 		const versions = this.options.versions ?? [1];
-		const out: Loaded = { descriptors: {}, unavailable: [] };
+		const out: Loaded = { descriptors: {}, unavailable: [], autoApply: [] };
 		const loaded = new Map<string, ModuleEndpoint>();
 		for (const module of this.options.modules) {
 			let manifest: { api_version?: number; features?: string[] };
@@ -245,6 +263,7 @@ export class OntologyClient {
 			try {
 				out.descriptors[module.id] = await this.call<Descriptor>(module, "GET", "/v1/ontology");
 				loaded.set(module.id, module);
+				if ((manifest.features ?? []).includes("auto_apply")) out.autoApply.push(module.id);
 			} catch {
 				out.unavailable.push(module.id);
 			}
@@ -328,6 +347,11 @@ export class OntologyClient {
 	/** The person's applied actions in a module that can still be undone, newest first. */
 	async undos(module: string): Promise<Undoable[]> {
 		return (await this.call<{ undo: Undoable[] }>(this.module(module), "GET", "/v1/undo")).undo;
+	}
+
+	/** What agents applied for the person in a module that lists auto_apply, newest first. */
+	async done(module: string): Promise<Done[]> {
+		return (await this.call<{ done: Done[] }>(this.module(module), "GET", "/v1/done")).done;
 	}
 
 	async proposals(module: string): Promise<Proposal[]> {

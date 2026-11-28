@@ -33,7 +33,14 @@ type Caller struct {
 	Permissions []string
 	// Agent is the runtime account of the agent acting for the person, empty for the person.
 	Agent string
+	// grants reports whether the agent's whole grant chain allows a grant action, such as
+	// crm:apply; nil for a person.
+	grants func(action string) bool
 }
+
+// AgentAllows reports whether the agent acting for the person holds a grant action on its
+// whole chain. It's false for a person, who holds no grant.
+func (c Caller) AgentAllows(action string) bool { return c.grants != nil && c.grants(action) }
 
 // Access checks who a request is for. Auth is the real one; tests use Fake.
 type Access interface {
@@ -136,7 +143,7 @@ func (a *Auth) Agent(ctx context.Context, header, action string) (Caller, error)
 		}
 	}
 	c, err := a.entitled(ctx, who.TenantID, who.UserID)
-	c.Agent = who.Agent.Runtime
+	c.Agent, c.grants = who.Agent.Runtime, who.Allows
 	return c, err
 }
 

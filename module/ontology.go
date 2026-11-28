@@ -80,7 +80,7 @@ func (m *Module) ontologyTools() []Tool {
 		tools = append(tools, Tool{Name: t.Name, Description: t.Description, Action: t.Action, Schema: t.InputSchema,
 			ReadOnly: t.Action == m.ID+":read",
 			result: func(ctx context.Context, c Caller, args json.RawMessage) map[string]any {
-				return run(ctx, c, c.Agent, args)
+				return run(ontology.WithAgentGrant(ctx, c.AgentAllows), c, c.Agent, args)
 			}})
 	}
 	return tools
@@ -91,5 +91,5 @@ func (m *Module) features() []string {
 	if m.Ontology == nil {
 		return []string{}
 	}
-	return []string{"ontology"}
+	return []string{"ontology", "auto_apply"}
 }
